@@ -1,0 +1,6 @@
+@echo off
+echo Installing requirements...
+cd backend
+pip install -r requirements.txt
+echo Starting backend...
+uvicorn main:app --reload --host 0.0.0.0 --port 8000

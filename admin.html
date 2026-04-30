@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель администратора</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .state-blue { background-color: #003366; }
+        .sidebar { background-color: #001f3f; }
+    </style>
+</head>
+<body class="min-h-screen flex">
+<div id="root" class="flex-1 flex"></div>
+
+<script type="text/babel">
+    const { useState, useEffect } = React;
+    const API_BASE = "/api";
+
+    const AdminApp = () => {
+        const [token, setToken] = useState(localStorage.getItem('admin_token'));
+        const [reports, setReports] = useState([]);
+        const [filter, setFilter] = useState({ region: '', category: '', status: '' });
+        const [selectedReport, setSelectedReport] = useState(null);
+        
+        // Login states
+        const [username, setUsername] = useState('');
+        const [password, setPassword] = useState('');
+        const [loginError, setLoginError] = useState('');
+
+        // Response states
+        const [responseText, setResponseText] = useState('');
+        const [statusToSet, setStatusToSet] = useState('');
+
+        useEffect(() => {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        });
+
+        useEffect(() => {
+            if (token) fetchReports();
+        }, [token]);
+
+        const fetchReports = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/admin/complaints`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) {
+                    handleLogout();
+                    return;
+                }
+                const data = await res.json();
+                setReports(data);
+            } catch (err) {
+                console.error("Fetch error", err);
+            }
+        };
+
+        const handleLogin = async (e) => {
+            e.preventDefault();
+            setLoginError('');
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData.toString()
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    localStorage.setItem('admin_token', data.access_token);
+                    setToken(data.access_token);
+                } else {
+                    setLoginError('Неверный логин или пароль');
+                }
+            } catch (err) {
+                setLoginError('Ошибка соединения с сервером');
+            }
+        };
+
+        const handleLogout = () => {
+            localStorage.removeItem('admin_token');
+            setToken(null);
+        };
+
+        const openReport = (report) => {
+            setSelectedReport(report);
+            setResponseText(report.admin_response || '');
+            setStatusToSet(report.status);
+        };
+
+        const handleSaveResponse = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/admin/complaints/${selectedReport.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        status: statusToSet,
+                        admin_response: responseText
+                    })
+                });
+                if (res.ok) {
+                    setSelectedReport(null);
+                    fetchReports();
+                } else {
+                    alert('Ошибка сохранения');
+                }
+            } catch (err) {
+                alert('Ошибка сети');
+            }
+        };
+
+        if (!token) {
+            return (
+                <div className="flex-1 flex items-center justify-center bg-slate-900">
+                    <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <h2 className="text-3xl font-black text-slate-800">Admin Login</h2>
+                            <p className="text-slate-500 mt-2">Панель управления жалобами</p>
+                        </div>
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Username</label>
+                                <input type="text" value={username} onChange={e=>setUsername(e.target.value)} required className="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-600 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Password</label>
+                                <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required className="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-600 outline-none" />
+                            </div>
+                            {loginError && <p className="text-red-500 text-sm font-bold">{loginError}</p>}
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-colors">Войти</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        const filteredReports = reports.filter(r => {
+            return (!filter.region || r.region.name === filter.region) &&
+                   (!filter.category || r.category === filter.category) &&
+                   (!filter.status || r.status === filter.status);
+        });
+
+        const getStatusBadge = (status) => {
+            const styles = {
+                'Новая': 'bg-blue-100 text-blue-700 border-blue-200',
+                'В работе': 'bg-amber-100 text-amber-700 border-amber-200',
+                'Закрыта': 'bg-emerald-100 text-emerald-700 border-emerald-200'
+            };
+            return <span className={`px-3 py-1 rounded-full text-xs font-bold border ${styles[status]}`}>{status}</span>;
+        };
+
+        return (
+            <div className="flex-1 flex overflow-hidden">
+                {/* Sidebar */}
+                <aside className="sidebar w-64 flex-shrink-0 flex flex-col h-full text-white/80">
+                    <div className="p-6 border-b border-white/10 flex items-center space-x-3">
+                        <i data-lucide="shield-alert" className="w-6 h-6 text-blue-400"></i>
+                        <span className="font-black text-xl tracking-tight text-white">ICare Admin</span>
+                    </div>
+                    <nav className="flex-1 p-4 space-y-2">
+                        <div className="bg-blue-600 text-white p-3 rounded-xl flex items-center space-x-3 cursor-pointer">
+                            <i data-lucide="file-text" className="w-5 h-5"></i>
+                            <span className="font-semibold">Жалобы</span>
+                        </div>
+                        <div className="hover:bg-white/5 p-3 rounded-xl flex items-center space-x-3 cursor-pointer transition-colors" onClick={() => alert('Генерация QR: Запустите backend/generate_qr.py в терминале')}>
+                            <i data-lucide="qr-code" className="w-5 h-5"></i>
+                            <span>QR Коды</span>
+                        </div>
+                    </nav>
+                    <div className="p-4 border-t border-white/10 flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-white text-xs">A</div>
+                            <p className="text-sm font-bold text-white">Admin</p>
+                        </div>
+                        <button onClick={handleLogout} className="text-white/50 hover:text-red-400"><i data-lucide="log-out" className="w-5 h-5"></i></button>
+                    </div>
+                </aside>
+
+                {/* Main Content */}
+                <main className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
+                    <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between flex-shrink-0">
+                        <h2 className="text-2xl font-bold text-slate-800">Реестр обращений</h2>
+                    </header>
+
+                    <div className="flex-1 p-8 overflow-y-auto">
+                        {/* Filters */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-wrap gap-4 items-end">
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-400 uppercase">Регион</label>
+                                <select className="block w-48 p-3 rounded-lg border border-slate-200 bg-slate-50" onChange={(e) => setFilter({...filter, region: e.target.value})}>
+                                    <option value="">Все регионы</option>
+                                    {[...new Set(reports.map(r => r.region.name))].map(name => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-400 uppercase">Категория</label>
+                                <select className="block w-48 p-3 rounded-lg border border-slate-200 bg-slate-50" onChange={(e) => setFilter({...filter, category: e.target.value})}>
+                                    <option value="">Все категории</option>
+                                    <option value="Коррупция">Коррупция</option>
+                                    <option value="Превышение должностных полномочий">Превышение должностных полномочий</option>
+                                    <option value="Попустительство">Попустительство</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-400 uppercase">Статус</label>
+                                <select className="block w-48 p-3 rounded-lg border border-slate-200 bg-slate-50" onChange={(e) => setFilter({...filter, status: e.target.value})}>
+                                    <option value="">Все статусы</option>
+                                    <option>Новая</option><option>В работе</option><option>Закрыта</option>
+                                </select>
+                            </div>
+                            <button onClick={fetchReports} className="ml-auto flex items-center space-x-2 text-sm text-blue-600 font-bold p-3 hover:bg-blue-50 rounded-lg">
+                                <i data-lucide="refresh-cw" className="w-4 h-4"></i>
+                                <span>Обновить</span>
+                            </button>
+                        </div>
+
+                        {/* Table */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">ID / Дата</th>
+                                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">Школа</th>
+                                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">Категория</th>
+                                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">Статус</th>
+                                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase text-center">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredReports.map(report => (
+                                        <tr key={report.id} className="hover:bg-slate-50/80 transition-colors">
+                                            <td className="px-6 py-6">
+                                                <div className="font-black text-slate-800 tracking-wider mb-1">{report.short_id}</div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase">{new Date(report.created_at).toLocaleDateString()}</div>
+                                            </td>
+                                            <td className="px-6 py-6">
+                                                <div className="font-bold text-slate-700 text-sm">{report.school.name}</div>
+                                                <div className="text-xs text-slate-500">{report.region.name}, {report.city.name}</div>
+                                            </td>
+                                            <td className="px-6 py-6">
+                                                <div className="text-xs font-black uppercase text-slate-800">{report.category}</div>
+                                                {report.target_person && <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">На: {report.target_person}</div>}
+                                            </td>
+                                            <td className="px-6 py-6">
+                                                {getStatusBadge(report.status)}
+                                            </td>
+                                            <td className="px-6 py-6 text-center">
+                                                <button onClick={() => openReport(report)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                                    <i data-lucide="eye" className="w-5 h-5"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredReports.length === 0 && (
+                                        <tr><td colSpan="5" className="text-center py-10 text-slate-400">Нет жалоб</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </main>
+
+                {/* Report Detail Modal */}
+                {selectedReport && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+                            <div className="state-blue p-6 text-white flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-xl font-black tracking-tight">{selectedReport.short_id}</h3>
+                                </div>
+                                <button onClick={() => setSelectedReport(null)} className="text-white/50 hover:text-white">
+                                    <i data-lucide="x" className="w-6 h-6"></i>
+                                </button>
+                            </div>
+                            <div className="p-8 space-y-6 overflow-y-auto">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Категория</p><p className="font-extrabold text-slate-800">{selectedReport.category}</p></div>
+                                    <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Школа</p><p className="font-bold text-slate-800">{selectedReport.school.name}</p></div>
+                                    <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Субъект жалобы</p><p className="font-bold text-slate-800">{selectedReport.target_person || 'Не указано'}</p></div>
+                                    <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Дата</p><p className="font-bold text-slate-800">{new Date(selectedReport.created_at).toLocaleString()}</p></div>
+                                </div>
+                                <div className="space-y-1 border-t border-slate-100 pt-6">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Описание ситуации</p>
+                                    <p className="text-slate-700 leading-relaxed text-sm bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap">{selectedReport.description}</p>
+                                </div>
+                                {selectedReport.attachment_url && (
+                                    <div className="pt-2">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Вложение</p>
+                                        <a href={`${API_BASE.replace('/api', '')}/app/${selectedReport.attachment_url.replace('../','')}`} target="_blank" className="text-blue-600 underline text-sm flex items-center gap-2">
+                                            <i data-lucide="paperclip" className="w-4 h-4"></i> Просмотреть файл
+                                        </a>
+                                    </div>
+                                )}
+                                
+                                <div className="border-t border-slate-200 pt-6 space-y-4">
+                                    <h4 className="font-bold text-lg">Работа с жалобой</h4>
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 mb-2">Статус</label>
+                                        <select value={statusToSet} onChange={e=>setStatusToSet(e.target.value)} className="w-full p-3 rounded-lg border border-slate-300">
+                                            <option>Новая</option><option>В работе</option><option>Закрыта</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 mb-2">Ответ администратора (видит заявитель)</label>
+                                        <textarea value={responseText} onChange={e=>setResponseText(e.target.value)} rows="3" className="w-full p-3 rounded-lg border border-slate-300" placeholder="Напишите ответ или запросите детали..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
+                                <button onClick={() => setSelectedReport(null)} className="px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-200 transition-colors">Отмена</button>
+                                <button onClick={handleSaveResponse} className="px-6 py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-md">Сохранить</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<AdminApp />);
+</script>
+</body>
+</html>

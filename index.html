@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система гражданского контроля</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .state-blue { background-color: #003366; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<div id="root"></div>
+
+<script type="text/babel">
+    const { useState, useEffect } = React;
+    const API_BASE = "/api";
+
+    const Header = () => (
+        <header className="state-blue py-6 px-4 shadow-lg">
+            <div className="max-w-4xl mx-auto flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                    <div className="bg-white/10 p-2 rounded-lg">
+                        <i data-lucide="shield-check" className="text-white w-8 h-8"></i>
+                    </div>
+                    <div>
+                        <h1 className="text-white font-bold text-xl leading-tight">Гражданский контроль</h1>
+                        <p className="text-blue-200 text-xs uppercase tracking-widest font-semibold">Система обращений</p>
+                    </div>
+                </div>
+                <div className="hidden md:block">
+                    <a href="status.html" className="text-white/80 hover:text-white text-sm font-medium underline">Проверить статус обращения</a>
+                </div>
+            </div>
+        </header>
+    );
+
+    const App = () => {
+        const [step, setStep] = useState(1);
+        const [loading, setLoading] = useState(false);
+        const [reportId, setReportId] = useState('');
+        
+        const [locations, setLocations] = useState({ regions: [], cities: [], schools: [] });
+        
+        const [formData, setFormData] = useState({
+            region: '',
+            city: '',
+            school: '',
+            category: '',
+            target: '',
+            description: '',
+            file: null
+        });
+
+        useEffect(() => {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }, [step]);
+
+        useEffect(() => {
+            fetch(`${API_BASE}/locations`)
+                .then(res => res.json())
+                .then(data => {
+                    setLocations(data);
+                    
+                    // Check URL for school slug
+                    const params = new URLSearchParams(window.location.search);
+                    const schoolSlug = params.get('school');
+                    if (schoolSlug && data.schools) {
+                        const targetSchool = data.schools.find(s => s.slug === schoolSlug);
+                        if (targetSchool) {
+                            const targetCity = data.cities.find(c => c.id === targetSchool.city_id);
+                            if (targetCity) {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    region: targetCity.region_id.toString(),
+                                    city: targetCity.id.toString(),
+                                    school: targetSchool.id.toString()
+                                }));
+                            }
+                        }
+                    }
+                })
+                .catch(err => console.error(err));
+        }, []);
+
+        const filteredCities = locations.cities.filter(c => c.region_id === parseInt(formData.region));
+        const filteredSchools = locations.schools.filter(s => s.city_id === parseInt(formData.city));
+
+        const handleSubmit = async (e) => {
+            e.preventDefault();
+            setLoading(true);
+            
+            const submitData = new FormData();
+            submitData.append('region_id', formData.region);
+            submitData.append('city_id', formData.city);
+            submitData.append('school_id', formData.school);
+            submitData.append('category', formData.category);
+            submitData.append('target_person', formData.target);
+            submitData.append('description', formData.description);
+            if (formData.file) {
+                submitData.append('file', formData.file);
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/complaints`, {
+                    method: 'POST',
+                    body: submitData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    setReportId(result.short_id);
+                    setStep(2);
+                } else {
+                    alert("Ошибка отправки: " + JSON.stringify(result));
+                }
+            } catch (err) {
+                alert("Ошибка сети!");
+            }
+            setLoading(false);
+        };
+
+        return (
+            <div className="flex-1 flex flex-col">
+                <Header />
+                <main className="flex-1 max-w-2xl mx-auto w-full p-4 md:p-8">
+                    {step === 1 ? (
+                        <div className="glass p-6 md:p-10 rounded-3xl shadow-2xl animate-fade-in border-t-4 border-blue-600">
+                            <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Подать обращение</h2>
+                            <p className="text-gray-500 mb-8 font-medium">Ваше обращение анонимно.</p>
+
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-gray-700 ml-1">Область</label>
+                                        <select required value={formData.region} onChange={(e) => setFormData({...formData, region: e.target.value, city: '', school: ''})} className="w-full p-4 rounded-xl border border-gray-200">
+                                            <option value="">Выберите область</option>
+                                            {locations.regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-bold text-gray-700 ml-1">Город</label>
+                                        <select required disabled={!formData.region} value={formData.city} onChange={(e) => setFormData({...formData, city: e.target.value, school: ''})} className="w-full p-4 rounded-xl border border-gray-200 disabled:bg-gray-50">
+                                            <option value="">Выберите город</option>
+                                            {filteredCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700 ml-1">Учебное заведение</label>
+                                    <select required disabled={!formData.city} value={formData.school} onChange={(e) => setFormData({...formData, school: e.target.value})} className="w-full p-4 rounded-xl border border-gray-200 disabled:bg-gray-50">
+                                        <option value="">Выберите школу</option>
+                                        {filteredSchools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700 ml-1">Категория нарушения</label>
+                                    <select required value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full p-4 rounded-xl border border-gray-200">
+                                        <option value="">Выберите категорию</option>
+                                        <option value="Коррупция">Коррупция</option>
+                                        <option value="Превышение должностных полномочий">Превышение должностных полномочий</option>
+                                        <option value="Попустительство">Попустительство</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700 ml-1">ФИО или должность сотрудника</label>
+                                    <input type="text" placeholder="На кого поступает жалоба?" value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})} className="w-full p-4 rounded-xl border border-gray-200" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700 ml-1">Описание ситуации</label>
+                                    <textarea required rows="4" placeholder="Опишите детали..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full p-4 rounded-xl border border-gray-200"></textarea>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700 ml-1">Доказательства (опционально)</label>
+                                    <input type="file" onChange={(e) => setFormData({...formData, file: e.target.files[0]})} className="w-full p-2 border rounded" />
+                                </div>
+                                <button type="submit" disabled={loading} className="w-full state-blue text-white font-bold py-5 px-6 rounded-2xl flex justify-center space-x-2">
+                                    {loading ? <span>Отправка...</span> : <span>ОТПРАВИТЬ АНОНИМНО</span>}
+                                </button>
+                            </form>
+                        </div>
+                    ) : (
+                        <div className="glass p-10 rounded-3xl shadow-2xl animate-fade-in border-t-4 border-emerald-500 text-center">
+                            <h2 className="text-3xl font-extrabold text-gray-900 mb-4">Обращение принято!</h2>
+                            <p className="text-gray-600 mb-8">Запомните ваш код для отслеживания статуса:</p>
+                            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 mb-8">
+                                <p className="text-4xl font-black text-blue-900">{reportId}</p>
+                            </div>
+                            <a href="status.html" className="text-blue-600 font-bold hover:underline">Перейти к отслеживанию</a>
+                        </div>
+                    )}
+                </main>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+</script>
+</body>
+</html>
