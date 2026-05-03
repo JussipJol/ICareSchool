@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import models, schemas, database
 
 # Secret key to encode the JWT token
-SECRET_KEY = "supersecretkey_for_icare_school_admin_panel_do_not_share"
+SECRET_KEY = "supersecretkey_for_icare4school_admin_panel_do_not_share"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 1 day
 

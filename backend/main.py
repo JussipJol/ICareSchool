@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
-app = FastAPI(title="ICareSchool API")
+app = FastAPI(title="ICare4School API")
 
 # Mount parent directory for static files (frontend)
 import pathlib
