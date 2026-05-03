@@ -11,6 +11,7 @@ from datetime import timedelta
 import models, schemas, database, auth
 
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 app = FastAPI(title="ICareSchool API")
 
@@ -38,6 +39,20 @@ def generate_short_id():
 
 @app.on_event("startup")
 def seed_database():
+    with database.engine.connect() as conn:
+        new_cols = [
+            ("decision_type", "TEXT"),
+            ("referred_to", "TEXT"),
+            ("decision_grounds", "TEXT"),
+            ("decision_evidence", "TEXT"),
+        ]
+        for col, col_type in new_cols:
+            try:
+                conn.execute(text(f"ALTER TABLE complaints ADD COLUMN {col} {col_type}"))
+                conn.commit()
+            except Exception:
+                pass
+
     db = database.SessionLocal()
     # Check admin
     if not db.query(models.AdminUser).first():
@@ -177,8 +192,16 @@ def update_complaint_status(
         raise HTTPException(status_code=404, detail="Complaint not found")
     
     complaint.status = update_data.status
-    if update_data.admin_response:
+    if update_data.admin_response is not None:
         complaint.admin_response = update_data.admin_response
-        
+    if update_data.decision_type is not None:
+        complaint.decision_type = update_data.decision_type
+    if update_data.referred_to is not None:
+        complaint.referred_to = update_data.referred_to
+    if update_data.decision_grounds is not None:
+        complaint.decision_grounds = update_data.decision_grounds
+    if update_data.decision_evidence is not None:
+        complaint.decision_evidence = update_data.decision_evidence
+
     db.commit()
     return {"message": "Updated successfully"}

@@ -43,9 +43,14 @@ class Complaint(Base):
     description = Column(Text, nullable=False)
     attachment_url = Column(String)
     
-    status = Column(String, default="Новая") # Новая, В работе, Закрыта
+    status = Column(String, default="Принято")  # Принято, На рассмотрении, Направлено по компетентности, Завершено
     urgency = Column(Integer, default=1)
-    admin_response = Column(Text, nullable=True) # Ответ администратора
+    admin_response = Column(Text, nullable=True)
+
+    decision_type = Column(String, nullable=True)    # territorial | law_enforcement | no_action
+    referred_to = Column(String, nullable=True)
+    decision_grounds = Column(Text, nullable=True)
+    decision_evidence = Column(Text, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

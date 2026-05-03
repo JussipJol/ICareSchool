@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Отслеживание статуса обращения</title>
+    <title>Мои обращения — ИКС</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -13,131 +13,379 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .state-blue { background-color: #003366; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.25s ease-out forwards; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
-
 <div id="root"></div>
 
 <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useCallback } = React;
     const API_BASE = "/api";
+    const LS_KEY = 'icare_complaints';
 
-    const Header = () => (
-        <header className="state-blue py-6 px-4 shadow-lg">
-            <div className="max-w-4xl mx-auto flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+    const STATUS_STYLES = {
+        'Принято':                        'bg-blue-100 text-blue-700 border-blue-200',
+        'На рассмотрении':               'bg-amber-100 text-amber-700 border-amber-200',
+        'Направлено по компетентности':  'bg-purple-100 text-purple-700 border-purple-200',
+        'Завершено':                      'bg-emerald-100 text-emerald-700 border-emerald-200',
+    };
+
+    const DECISION_LABELS = {
+        territorial:     'Направлено в территориальные подразделения образования',
+        law_enforcement: 'Направлено по компетентности',
+        no_action:       'Оставлено без рассмотрения',
+    };
+
+    function addBusinessDays(dateStr, days) {
+        let count = 0;
+        let d = new Date(dateStr);
+        while (count < days) {
+            d.setDate(d.getDate() + 1);
+            const dow = d.getDay();
+            if (dow !== 0 && dow !== 6) count++;
+        }
+        return d;
+    }
+
+    function deadlineInfo(createdAt) {
+        const deadline = addBusinessDays(createdAt, 5);
+        const now = new Date();
+        const overdue = now > deadline;
+        const diffDays = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+        return { deadline, overdue, diffDays };
+    }
+
+    const StatusBadge = ({ status }) => (
+        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_STYLES[status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+            {status}
+        </span>
+    );
+
+    const Header = ({ unreadCount }) => (
+        <header className="state-blue py-5 px-4 shadow-lg">
+            <div className="max-w-2xl mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="bg-white/10 p-2 rounded-lg">
+                        <i data-lucide="shield-check" className="text-white w-6 h-6"></i>
+                    </div>
                     <div>
-                        <h1 className="text-white font-bold text-xl leading-tight">Проверка статуса</h1>
+                        <h1 className="text-white font-bold text-lg leading-tight">Мои обращения</h1>
+                        <p className="text-blue-200 text-xs uppercase tracking-widest font-semibold">Система обращений</p>
                     </div>
                 </div>
-                <div>
-                    <a href="index.html" className="text-white/80 hover:text-white text-sm font-medium underline">Подать жалобу</a>
-                </div>
+                <a href="index.html" className="text-white/80 hover:text-white text-sm font-medium underline flex items-center gap-1.5">
+                    <i data-lucide="plus-circle" className="w-4 h-4"></i>
+                    Подать обращение
+                </a>
             </div>
         </header>
     );
 
     const App = () => {
-        const [shortId, setShortId] = useState('');
-        const [loading, setLoading] = useState(false);
-        const [result, setResult] = useState(null);
-        const [error, setError] = useState('');
+        const [activeTab, setActiveTab] = useState('mine');
+        const [myComplaints, setMyComplaints] = useState([]);
+        const [liveStatuses, setLiveStatuses] = useState({});
+        const [unread, setUnread] = useState({});
+        const [loadingStatuses, setLoadingStatuses] = useState(false);
 
-        const handleCheck = async (e) => {
-            e.preventDefault();
-            setLoading(true);
-            setError('');
-            setResult(null);
+        // Search tab state
+        const [searchCode, setSearchCode] = useState('');
+        const [searchLoading, setSearchLoading] = useState(false);
+        const [searchResult, setSearchResult] = useState(null);
+        const [searchError, setSearchError] = useState('');
 
-            try {
-                const res = await fetch(`${API_BASE}/complaints/status/${shortId.trim()}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setResult(data);
-                } else {
-                    setError('Обращение с таким кодом не найдено.');
-                }
-            } catch (err) {
-                setError('Ошибка сервера.');
+        useEffect(() => {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        });
+
+        // Load saved complaints from localStorage
+        useEffect(() => {
+            const saved = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+            setMyComplaints(saved);
+
+            // Check URL param — if opened with ?code=CARE-XXX, go to search tab
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                setSearchCode(code.toUpperCase());
+                setActiveTab('search');
             }
-            setLoading(false);
+        }, []);
+
+        // Fetch live statuses for all saved complaints
+        useEffect(() => {
+            if (myComplaints.length === 0) return;
+            setLoadingStatuses(true);
+
+            const saved = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+            const newUnread = {};
+
+            Promise.all(
+                myComplaints.map(c =>
+                    fetch(`${API_BASE}/complaints/status/${c.short_id}`)
+                        .then(r => r.ok ? r.json() : null)
+                        .catch(() => null)
+                )
+            ).then(results => {
+                const statuses = {};
+                results.forEach((data, i) => {
+                    if (!data) return;
+                    const shortId = myComplaints[i].short_id;
+                    statuses[shortId] = data;
+                    if (myComplaints[i].last_known_status !== data.status) {
+                        newUnread[shortId] = true;
+                    }
+                });
+                setLiveStatuses(statuses);
+                setUnread(newUnread);
+
+                // Update last_known_status in localStorage
+                const updated = saved.map(c => ({
+                    ...c,
+                    last_known_status: statuses[c.short_id]?.status || c.last_known_status
+                }));
+                localStorage.setItem(LS_KEY, JSON.stringify(updated));
+                setMyComplaints(updated);
+                setLoadingStatuses(false);
+            });
+        }, [myComplaints.length]);
+
+        const unreadCount = Object.keys(unread).length;
+
+        const handleSearch = async (e) => {
+            e.preventDefault();
+            setSearchLoading(true);
+            setSearchError('');
+            setSearchResult(null);
+            try {
+                const res = await fetch(`${API_BASE}/complaints/status/${searchCode.trim()}`);
+                if (res.ok) {
+                    setSearchResult(await res.json());
+                } else {
+                    setSearchError('Обращение с таким кодом не найдено.');
+                }
+            } catch { setSearchError('Ошибка сервера.'); }
+            setSearchLoading(false);
         };
 
-        const getStatusColor = (status) => {
-            switch(status) {
-                case 'Новая': return 'bg-blue-100 text-blue-800 border-blue-300';
-                case 'В работе': return 'bg-amber-100 text-amber-800 border-amber-300';
-                case 'Закрыта': return 'bg-emerald-100 text-emerald-800 border-emerald-300';
-                default: return 'bg-gray-100 text-gray-800';
-            }
+        const markRead = (shortId) => {
+            setUnread(prev => { const n = {...prev}; delete n[shortId]; return n; });
+        };
+
+        const ResultCard = ({ data, isNew }) => {
+            const isDone = data.status === 'Завершено' || data.status === 'Направлено по компетентности';
+            const { overdue, diffDays, deadline } = deadlineInfo(data.created_at);
+
+            return (
+                <div className="mt-6 pt-6 border-t border-gray-100 animate-fade-in space-y-5">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-black text-xl text-gray-800">{data.short_id}</h3>
+                        <StatusBadge status={data.status} />
+                    </div>
+
+                    {/* Progress steps */}
+                    <div className="flex items-center gap-1">
+                        {['Принято', 'На рассмотрении', 'Направлено по компетентности', 'Завершено'].map((s, i, arr) => {
+                            const statuses = ['Принято', 'На рассмотрении', 'Направлено по компетентности', 'Завершено'];
+                            const currentIdx = statuses.indexOf(data.status);
+                            const isDoneStatus = i <= currentIdx;
+                            const isActive = i === currentIdx;
+                            return (
+                                <React.Fragment key={s}>
+                                    <div className={`flex-1 text-center`}>
+                                        <div className={`h-1.5 rounded-full mb-1.5 ${isDoneStatus ? (isActive ? 'bg-blue-500' : 'bg-blue-300') : 'bg-gray-200'}`}></div>
+                                        <span className={`text-[9px] font-bold leading-tight block ${isActive ? 'text-blue-600' : isDoneStatus ? 'text-blue-400' : 'text-gray-400'}`}>{s}</span>
+                                    </div>
+                                    {i < arr.length - 1 && <div className="w-1"></div>}
+                                </React.Fragment>
+                            );
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase">Категория</p>
+                            <p className="font-semibold text-gray-800 text-sm mt-0.5">{data.category}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase">Дата подачи</p>
+                            <p className="font-semibold text-gray-800 text-sm mt-0.5">{new Date(data.created_at).toLocaleDateString('ru-RU')}</p>
+                        </div>
+                    </div>
+
+                    {/* Deadline */}
+                    {!isDone && (
+                        <div className={`flex items-center gap-2.5 p-3 rounded-xl border text-sm font-semibold ${overdue ? 'bg-red-50 border-red-200 text-red-700' : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+                            <i data-lucide={overdue ? 'alert-circle' : 'clock'} className="w-4 h-4 flex-shrink-0"></i>
+                            {overdue
+                                ? `Ожидаемый срок рассмотрения истёк (${deadline.toLocaleDateString('ru-RU')})`
+                                : `Срок рассмотрения: до ${deadline.toLocaleDateString('ru-RU')} (${diffDays} дн.)`}
+                        </div>
+                    )}
+
+                    {/* Decision info */}
+                    {data.decision_type && (
+                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
+                            <p className="text-xs font-black text-purple-700 uppercase tracking-wide">Принятое решение</p>
+                            <p className="font-bold text-purple-900 text-sm">{DECISION_LABELS[data.decision_type]}</p>
+                            {data.referred_to && (
+                                <p className="text-sm text-purple-700">Направлено в: <span className="font-semibold">{data.referred_to}</span></p>
+                            )}
+                            {data.decision_grounds && (
+                                <div>
+                                    <p className="text-xs font-bold text-purple-600 uppercase mt-2">Основания</p>
+                                    <p className="text-sm text-purple-800 mt-0.5">{data.decision_grounds}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Admin response */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Ответ уполномоченного сотрудника</p>
+                        {data.admin_response ? (
+                            <p className="text-slate-800 text-sm">{data.admin_response}</p>
+                        ) : (
+                            <p className="text-slate-400 italic text-sm">Ожидает рассмотрения...</p>
+                        )}
+                    </div>
+                </div>
+            );
         };
 
         return (
-            <div className="flex-1 flex flex-col">
-                <Header />
-                <main className="flex-1 max-w-xl mx-auto w-full p-4 md:p-8 mt-10">
-                    <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100">
-                        <h2 className="text-2xl font-bold mb-6 text-center">Проверить обращение</h2>
-                        
-                        <form onSubmit={handleCheck} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">Код отслеживания (например: CARE-X9J2)</label>
-                                <input 
-                                    type="text" 
-                                    required 
-                                    value={shortId} 
-                                    onChange={(e) => setShortId(e.target.value.toUpperCase())}
-                                    placeholder="CARE-..." 
-                                    className="w-full p-4 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-600 outline-none text-xl tracking-wider text-center font-bold uppercase"
-                                />
-                            </div>
-                            <button 
-                                type="submit" 
-                                disabled={loading}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-colors disabled:opacity-50"
-                            >
-                                {loading ? 'Поиск...' : 'ПРОВЕРИТЬ'}
-                            </button>
-                        </form>
+            <div className="flex-1 flex flex-col min-h-screen">
+                <Header unreadCount={unreadCount} />
 
-                        {error && (
-                            <div className="mt-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-center font-medium">
-                                {error}
-                            </div>
-                        )}
-
-                        {result && (
-                            <div className="mt-8 pt-8 border-t border-gray-100 animate-fade-in">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="font-black text-xl text-gray-800">{result.short_id}</h3>
-                                    <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${getStatusColor(result.status)}`}>
-                                        {result.status}
-                                    </span>
-                                </div>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-400 uppercase">Категория</p>
-                                        <p className="font-semibold text-gray-800">{result.category}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-400 uppercase">Дата подачи</p>
-                                        <p className="font-semibold text-gray-800">{new Date(result.created_at).toLocaleString('ru-RU')}</p>
-                                    </div>
-                                    
-                                    <div className="mt-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                                        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Ответ администратора:</p>
-                                        {result.admin_response ? (
-                                            <p className="text-slate-800">{result.admin_response}</p>
-                                        ) : (
-                                            <p className="text-slate-400 italic">Ожидает ответа администратора...</p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                <main className="flex-1 max-w-2xl mx-auto w-full p-4 md:p-6">
+                    {/* Tabs */}
+                    <div className="flex gap-1 bg-white rounded-2xl p-1 shadow-sm border border-gray-100 mb-6">
+                        <button
+                            onClick={() => setActiveTab('mine')}
+                            className={`flex-1 py-2.5 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all ${activeTab === 'mine' ? 'bg-blue-700 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}>
+                            <i data-lucide="list" className="w-4 h-4"></i>
+                            Мои обращения
+                            {unreadCount > 0 && (
+                                <span className="bg-red-500 text-white text-[10px] font-black rounded-full w-4 h-4 flex items-center justify-center">
+                                    {unreadCount}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('search')}
+                            className={`flex-1 py-2.5 text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all ${activeTab === 'search' ? 'bg-blue-700 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}>
+                            <i data-lucide="search" className="w-4 h-4"></i>
+                            Проверить по коду
+                        </button>
                     </div>
+
+                    {/* Tab: Мои обращения */}
+                    {activeTab === 'mine' && (
+                        <div className="animate-fade-in">
+                            {myComplaints.length === 0 ? (
+                                <div className="bg-white rounded-3xl p-10 shadow-sm border border-gray-100 text-center">
+                                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-100 mb-4">
+                                        <i data-lucide="inbox" className="w-8 h-8 text-gray-400"></i>
+                                    </div>
+                                    <p className="text-gray-500 font-medium">У вас пока нет поданных обращений</p>
+                                    <a href="index.html" className="inline-block mt-4 text-blue-600 font-bold underline text-sm">Подать обращение</a>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {loadingStatuses && (
+                                        <p className="text-center text-sm text-gray-400 py-2">Обновление статусов...</p>
+                                    )}
+                                    {myComplaints.map(c => {
+                                        const live = liveStatuses[c.short_id];
+                                        const isNew = unread[c.short_id];
+                                        const status = live?.status || c.last_known_status || '—';
+                                        const isDone = status === 'Завершено' || status === 'Направлено по компетентности';
+                                        const { overdue, diffDays } = deadlineInfo(c.submitted_at);
+
+                                        return (
+                                            <div key={c.short_id}
+                                                className={`bg-white rounded-2xl p-5 shadow-sm border transition-all ${isNew ? 'border-blue-400 shadow-blue-100' : 'border-gray-100'}`}
+                                                onClick={() => markRead(c.short_id)}>
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-black text-gray-800 tracking-wider">{c.short_id}</span>
+                                                            <StatusBadge status={status} />
+                                                            {isNew && (
+                                                                <span className="text-[10px] font-black bg-red-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                                                    Изменился статус
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 mt-1">{c.category} · {new Date(c.submitted_at).toLocaleDateString('ru-RU')}</p>
+                                                        {!isDone && (
+                                                            <p className={`text-xs mt-1.5 font-semibold ${overdue ? 'text-red-500' : 'text-gray-500'}`}>
+                                                                {overdue ? 'Срок рассмотрения истёк' : `До рассмотрения: ${diffDays} дн.`}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSearchCode(c.short_id);
+                                                            setSearchResult(live || null);
+                                                            setSearchError('');
+                                                            setActiveTab('search');
+                                                            if (!live) {
+                                                                // trigger search
+                                                                fetch(`${API_BASE}/complaints/status/${c.short_id}`)
+                                                                    .then(r => r.json())
+                                                                    .then(d => setSearchResult(d))
+                                                                    .catch(() => {});
+                                                            }
+                                                            markRead(c.short_id);
+                                                        }}
+                                                        className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-colors flex-shrink-0">
+                                                        <i data-lucide="chevron-right" className="w-5 h-5"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Tab: Проверить по коду */}
+                    {activeTab === 'search' && (
+                        <div className="animate-fade-in">
+                            <div className="bg-white p-7 rounded-3xl shadow-sm border border-gray-100">
+                                <form onSubmit={handleSearch} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-2">Регистрационный номер</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={searchCode}
+                                            onChange={e => { setSearchCode(e.target.value.toUpperCase()); setSearchResult(null); setSearchError(''); }}
+                                            placeholder="CARE-..."
+                                            className="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-xl tracking-wider text-center font-black uppercase"
+                                        />
+                                    </div>
+                                    <button type="submit" disabled={searchLoading}
+                                        className="w-full state-blue hover:opacity-90 text-white font-bold py-4 rounded-xl transition-opacity disabled:opacity-50">
+                                        {searchLoading ? 'Поиск...' : 'ПРОВЕРИТЬ СТАТУС'}
+                                    </button>
+                                </form>
+
+                                {searchError && (
+                                    <div className="mt-5 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-center text-sm font-semibold">
+                                        {searchError}
+                                    </div>
+                                )}
+
+                                {searchResult && <ResultCard data={searchResult} />}
+                            </div>
+                        </div>
+                    )}
                 </main>
             </div>
         );

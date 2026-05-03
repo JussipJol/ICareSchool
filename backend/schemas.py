@@ -45,6 +45,9 @@ class ComplaintStatus(BaseModel):
     category: str
     status: str
     admin_response: Optional[str] = None
+    decision_type: Optional[str] = None
+    referred_to: Optional[str] = None
+    decision_grounds: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -60,9 +63,12 @@ class ComplaintAdminDetail(BaseModel):
     status: str
     urgency: int
     admin_response: Optional[str]
+    decision_type: Optional[str]
+    referred_to: Optional[str]
+    decision_grounds: Optional[str]
+    decision_evidence: Optional[str]
     created_at: datetime
-    
-    # Nested info
+
     region: Region
     city: City
     school: School
@@ -79,4 +85,8 @@ class TokenData(BaseModel):
 
 class AdminResponseUpdate(BaseModel):
     status: str
-    admin_response: str
+    admin_response: Optional[str] = None
+    decision_type: Optional[str] = None
+    referred_to: Optional[str] = None
+    decision_grounds: Optional[str] = None
+    decision_evidence: Optional[str] = None

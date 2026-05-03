@@ -39,7 +39,10 @@
                     </div>
                 </div>
                 <div className="hidden md:block">
-                    <a href="status.html" className="text-white/80 hover:text-white text-sm font-medium underline">Проверить статус обращения</a>
+                    <a href="status.html" className="text-white/80 hover:text-white text-sm font-medium underline flex items-center gap-1.5">
+                        <i data-lucide="list" className="w-4 h-4"></i>
+                        Мои обращения
+                    </a>
                 </div>
             </div>
         </header>
@@ -119,6 +122,15 @@
                 const result = await response.json();
                 if (response.ok) {
                     setReportId(result.short_id);
+                    // Save to localStorage for "Мои обращения"
+                    const saved = JSON.parse(localStorage.getItem('icare_complaints') || '[]');
+                    saved.unshift({
+                        short_id: result.short_id,
+                        category: formData.category,
+                        submitted_at: new Date().toISOString(),
+                        last_known_status: 'Принято'
+                    });
+                    localStorage.setItem('icare_complaints', JSON.stringify(saved));
                     setStep(2);
                 } else {
                     alert("Ошибка отправки: " + JSON.stringify(result));
@@ -195,7 +207,13 @@
                             <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 mb-8">
                                 <p className="text-4xl font-black text-blue-900">{reportId}</p>
                             </div>
-                            <a href="status.html" className="text-blue-600 font-bold hover:underline">Перейти к отслеживанию</a>
+                            <div className="flex flex-col gap-3 items-center">
+                                <a href="status.html" className="inline-flex items-center gap-2 text-white font-bold state-blue px-6 py-3 rounded-xl hover:opacity-90 transition-opacity">
+                                    <i data-lucide="list" className="w-4 h-4"></i>
+                                    Мои обращения
+                                </a>
+                                <a href="index.html" className="text-gray-400 text-sm hover:underline">Подать ещё одно</a>
+                            </div>
                         </div>
                     )}
                 </main>
