@@ -80,6 +80,7 @@
         const [filter, setFilter] = useState({ region: '', category: '', status: '' });
         const [selectedReport, setSelectedReport] = useState(null);
         const [saving, setSaving] = useState(false);
+        const [showQr, setShowQr] = useState(false);
 
         const [username, setUsername] = useState('');
         const [password, setPassword] = useState('');
@@ -239,9 +240,9 @@
                             )}
                         </div>
                         <div className="hover:bg-white/5 p-3 rounded-xl flex items-center space-x-3 cursor-pointer transition-colors"
-                             onClick={() => alert('Генерация QR: Запустите backend/generate_qr.py в терминале')}>
+                             onClick={() => setShowQr(true)}>
                             <i data-lucide="qr-code" className="w-5 h-5"></i>
-                            <span className="text-sm">QR-коды</span>
+                            <span className="text-sm">QR-код</span>
                         </div>
                     </nav>
                     <div className="p-4 border-t border-white/10 flex items-center justify-between">
@@ -370,6 +371,32 @@
                         </div>
                     </div>
                 </main>
+
+                {/* QR Modal */}
+                {showQr && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in">
+                            <div className="state-blue p-5 text-white flex justify-between items-center">
+                                <h3 className="font-black text-lg">QR-код для подачи обращений</h3>
+                                <button onClick={() => setShowQr(false)} className="text-white/50 hover:text-white">
+                                    <i data-lucide="x" className="w-6 h-6"></i>
+                                </button>
+                            </div>
+                            <div className="p-8 flex flex-col items-center gap-5">
+                                <img src="/api/qr" alt="QR код" className="w-56 h-56 rounded-xl border border-slate-100 shadow" />
+                                <p className="text-sm text-slate-500 text-center">Отсканируйте камерой телефона — откроется форма подачи обращения</p>
+                                <code className="text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 break-all text-center">
+                                    {window.location.origin}/app/index.html
+                                </code>
+                                <a href="/api/qr" download="icare-qr.png"
+                                    className="flex items-center gap-2 text-sm font-bold text-blue-700 hover:bg-blue-50 px-4 py-2.5 rounded-xl transition-colors border border-blue-200">
+                                    <i data-lucide="download" className="w-4 h-4"></i>
+                                    Скачать PNG
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Modal */}
                 {selectedReport && (
