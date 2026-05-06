@@ -54,6 +54,7 @@
         const [reportId, setReportId] = useState('');
         
         const [locations, setLocations] = useState({ regions: [], cities: [], schools: [] });
+        const [locationsError, setLocationsError] = useState(false);
         
         const [formData, setFormData] = useState({
             region: '',
@@ -70,12 +71,16 @@
         }, [step]);
 
         useEffect(() => {
-            fetch(`${API_BASE}/locations`)
-                .then(res => res.json())
+            fetch(`${API_BASE}/locations`, {
+                headers: { 'ngrok-skip-browser-warning': 'true' }
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
                 .then(data => {
                     setLocations(data);
-                    
-                    // Check URL for school slug
+
                     const params = new URLSearchParams(window.location.search);
                     const schoolSlug = params.get('school');
                     if (schoolSlug && data.schools) {
@@ -93,7 +98,7 @@
                         }
                     }
                 })
-                .catch(err => console.error(err));
+                .catch(() => setLocationsError(true));
         }, []);
 
         const filteredCities = locations.cities.filter(c => c.region_id === parseInt(formData.region));
@@ -150,6 +155,12 @@
                             <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Подать обращение</h2>
                             <p className="text-gray-500 mb-8 font-medium">Ваше обращение анонимно.</p>
 
+                            {locationsError && (
+                                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-semibold flex items-center gap-2">
+                                    <i data-lucide="wifi-off" className="w-4 h-4 flex-shrink-0"></i>
+                                    Не удалось загрузить список школ. Обновите страницу.
+                                </div>
+                            )}
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
