@@ -122,9 +122,11 @@
             const saved = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
             const newUnread = {};
 
+            const HEADERS = { 'ngrok-skip-browser-warning': 'true' };
+
             Promise.all(
                 myComplaints.map(c =>
-                    fetch(`${API_BASE}/complaints/status/${c.short_id}`)
+                    fetch(`${API_BASE}/complaints/status/${c.short_id}`, { headers: HEADERS })
                         .then(r => r.ok ? r.json() : null)
                         .catch(() => null)
                 )
@@ -160,13 +162,15 @@
             setSearchError('');
             setSearchResult(null);
             try {
-                const res = await fetch(`${API_BASE}/complaints/status/${searchCode.trim()}`);
+                const res = await fetch(`${API_BASE}/complaints/status/${searchCode.trim()}`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
                 if (res.ok) {
                     setSearchResult(await res.json());
                 } else {
                     setSearchError('Обращение с таким кодом не найдено.');
                 }
-            } catch { setSearchError('Ошибка сервера.'); }
+            } catch { setSearchError('Ошибка соединения. Обновите страницу и попробуйте снова.'); }
             setSearchLoading(false);
         };
 
@@ -334,10 +338,11 @@
                                                             setSearchError('');
                                                             setActiveTab('search');
                                                             if (!live) {
-                                                                // trigger search
-                                                                fetch(`${API_BASE}/complaints/status/${c.short_id}`)
-                                                                    .then(r => r.json())
-                                                                    .then(d => setSearchResult(d))
+                                                                fetch(`${API_BASE}/complaints/status/${c.short_id}`, {
+                                                                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                                                                })
+                                                                    .then(r => r.ok ? r.json() : null)
+                                                                    .then(d => { if (d) setSearchResult(d); })
                                                                     .catch(() => {});
                                                             }
                                                             markRead(c.short_id);
