@@ -289,7 +289,7 @@
                                 <select className="block w-48 p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm"
                                     onChange={e => setFilter({...filter, category: e.target.value})}>
                                     <option value="">Все категории</option>
-                                    <option>Коррупция</option>
+                                    <option>Взятка</option>
                                     <option>Хищение</option>
                                     <option>Превышение должностных полномочий</option>
                                     <option>Попустительство</option>
@@ -534,15 +534,27 @@
                                 </div>
                             </div>
 
-                            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50 flex-shrink-0">
-                                <button onClick={() => setSelectedReport(null)}
-                                    className="px-6 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-200 transition-colors text-sm">
-                                    Отмена
+                            <div className="p-5 border-t border-slate-100 flex justify-between gap-3 bg-slate-50 flex-shrink-0">
+                                <button
+                                    onClick={() => {
+                                        setStatusToSet('Завершено');
+                                        setDecisionType('no_action');
+                                        setReferredTo('');
+                                    }}
+                                    className="px-4 py-2.5 rounded-xl font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors text-sm flex items-center gap-2">
+                                    <i data-lucide="x-circle" className="w-4 h-4"></i>
+                                    Оставить без рассмотрения
                                 </button>
-                                <button onClick={handleSave} disabled={saving}
-                                    className="px-6 py-2.5 rounded-xl font-bold text-white bg-blue-700 hover:bg-blue-800 transition-colors shadow text-sm disabled:opacity-60">
-                                    {saving ? 'Сохранение...' : 'Сохранить решение'}
-                                </button>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setSelectedReport(null)}
+                                        className="px-6 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-200 transition-colors text-sm">
+                                        Отмена
+                                    </button>
+                                    <button onClick={handleSave} disabled={saving}
+                                        className="px-6 py-2.5 rounded-xl font-bold text-white bg-blue-700 hover:bg-blue-800 transition-colors shadow text-sm disabled:opacity-60">
+                                        {saving ? 'Сохранение...' : 'Сохранить решение'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

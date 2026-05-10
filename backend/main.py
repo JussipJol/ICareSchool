@@ -161,7 +161,7 @@ def create_complaint(
             f.write(file.file.read())
         attachment_url = file_path
 
-    urgency = 3 if category in ["Коррупция", "Хищение", "Превышение должностных полномочий"] else 1
+    urgency = 3 if category in ["Взятка", "Хищение", "Превышение должностных полномочий"] else 1
 
     db_complaint = models.Complaint(
         short_id=short_id,
